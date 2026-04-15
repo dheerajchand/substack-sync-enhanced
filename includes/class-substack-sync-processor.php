@@ -184,6 +184,52 @@ class Substack_Sync_Processor
     }
 
     /**
+     * Fetch the RSS feed, using a transient cache to avoid re-fetching during batch sync.
+     *
+     * @param bool $force_refresh Whether to bypass the cache.
+     * @return \SimplePie|WP_Error The parsed feed or error.
+     */
+    private function get_cached_feed(bool $force_refresh = false)
+    {
+        $cache_key = 'substack_sync_feed_cache';
+
+        if (! $force_refresh) {
+            $cached = get_transient($cache_key);
+            if ($cached !== false) {
+                return $cached;
+            }
+        }
+
+        $feed = fetch_feed($this->settings['feed_url']);
+
+        if (! is_wp_error($feed)) {
+            // Cache parsed feed items for 10 minutes (covers a full batch sync session)
+            $items_data = [];
+            foreach ($feed->get_items() as $item) {
+                $items_data[] = [
+                    'id' => $item->get_id(),
+                    'title' => $item->get_title(),
+                    'content' => $item->get_content(),
+                    'date' => $item->get_date('Y-m-d H:i:s'),
+                ];
+            }
+            set_transient($cache_key, $items_data, 10 * MINUTE_IN_SECONDS);
+
+            return $items_data;
+        }
+
+        return $feed;
+    }
+
+    /**
+     * Clear the feed cache (called when a batch sync completes).
+     */
+    public function clear_feed_cache(): void
+    {
+        delete_transient('substack_sync_feed_cache');
+    }
+
+    /**
      * Process individual posts with detailed progress tracking.
      *
      * @param int $batch_size Number of posts to process per batch.
@@ -202,19 +248,20 @@ class Substack_Sync_Processor
             ];
         }
 
-        $feed = fetch_feed($this->settings['feed_url']);
+        // Use cached feed to avoid re-fetching on every batch request
+        $force_refresh = ($offset === 0);
+        $items = $this->get_cached_feed($force_refresh);
 
-        if (is_wp_error($feed)) {
+        if (is_wp_error($items)) {
             return [
                 'success' => false,
-                'error' => 'Error fetching feed: ' . $feed->get_error_message(),
+                'error' => 'Error fetching feed: ' . $items->get_error_message(),
                 'total_posts' => 0,
                 'posts_processed' => 0,
                 'has_more' => false,
             ];
         }
 
-        $items = $feed->get_items();
         $total_posts = count($items);
 
         if ($total_posts === 0) {
@@ -234,7 +281,7 @@ class Substack_Sync_Processor
 
         foreach ($batch_items as $item) {
             try {
-                $result = $this->process_feed_item($item, true);
+                $result = $this->process_cached_feed_item($item, true);
                 $posts_processed++;
                 $processed_posts[] = $result;
             } catch (Exception $e) {
@@ -243,7 +290,7 @@ class Substack_Sync_Processor
                 $posts_processed++;
                 $processed_posts[] = [
                     'action' => 'error',
-                    'post_title' => $item->get_title() ?? 'Unknown',
+                    'post_title' => $item['title'] ?? 'Unknown',
                     'success' => false,
                     'message' => 'Error: ' . $e->getMessage(),
                 ];
@@ -252,6 +299,11 @@ class Substack_Sync_Processor
 
         $new_offset = $offset + $batch_size;
         $has_more = $new_offset < $total_posts;
+
+        // Clear the feed cache when batch sync is complete
+        if (! $has_more) {
+            $this->clear_feed_cache();
+        }
 
         return [
             'success' => true,
@@ -264,6 +316,83 @@ class Substack_Sync_Processor
             'processed_posts' => $processed_posts,
             'errors' => $errors,
         ];
+    }
+
+    /**
+     * Process a single cached feed item (array format from transient cache).
+     *
+     * @param array<string, mixed> $item The cached feed item.
+     * @param bool $return_status Whether to return status information.
+     * @return array<string, mixed>|void Status information if requested.
+     */
+    private function process_cached_feed_item(array $item, bool $return_status = false)
+    {
+        $guid = $item['id'];
+        $existing_post = $this->get_existing_post($guid);
+        $post_title = $item['title'];
+
+        $content = $this->process_content($item['content']);
+        $full_text = $post_title . ' ' . $content;
+        $categories = $this->apply_category_mapping($full_text);
+
+        $post_data = [
+            'post_title' => $post_title,
+            'post_content' => $content,
+            'post_status' => $this->settings['default_post_status'] ?? 'draft',
+            'post_author' => $this->settings['default_author'] ?? 1,
+            'post_date' => $item['date'],
+            'post_type' => 'post',
+        ];
+
+        if (! empty($categories)) {
+            $post_data['post_category'] = $categories;
+        }
+
+        if ($existing_post) {
+            $post_data['ID'] = $existing_post['post_id'];
+            // Preserve existing post status
+            $current_post = get_post($existing_post['post_id']);
+            if ($current_post) {
+                $post_data['post_status'] = $current_post->post_status;
+            }
+
+            if ($this->should_skip_post($guid)) {
+                if ($return_status) {
+                    return ['action' => 'skipped', 'post_title' => $post_title, 'post_id' => $existing_post['post_id'], 'success' => false, 'message' => "Skipped: {$post_title} (max retries exceeded)"];
+                }
+                return;
+            }
+
+            $post_id = wp_update_post($post_data);
+            $action = 'updated';
+        } else {
+            if ($this->should_skip_post($guid)) {
+                if ($return_status) {
+                    return ['action' => 'skipped', 'post_title' => $post_title, 'post_id' => null, 'success' => false, 'message' => "Skipped: {$post_title} (max retries exceeded)"];
+                }
+                return;
+            }
+
+            $post_id = wp_insert_post($post_data);
+            $action = 'imported';
+        }
+
+        if ($post_id && ! is_wp_error($post_id)) {
+            $this->log_sync($post_id, $guid, $action, $post_title);
+            $this->process_post_images($post_id, $post_data['post_content']);
+
+            if ($return_status) {
+                return ['action' => $action, 'post_title' => $post_title, 'post_id' => $post_id, 'success' => true, 'message' => "Successfully {$action}: {$post_title}"];
+            }
+        } else {
+            $error_message = is_wp_error($post_id) ? $post_id->get_error_message() : 'Unknown error occurred';
+            error_log("Substack Sync: Failed to {$action} post - {$error_message}");
+            $this->log_sync($existing_post['post_id'] ?? 0, $guid, 'error', $post_title, $error_message);
+
+            if ($return_status) {
+                return ['action' => 'error', 'post_title' => $post_title, 'post_id' => $existing_post['post_id'] ?? null, 'success' => false, 'message' => "Failed to {$action}: {$post_title} - {$error_message}"];
+            }
+        }
     }
 
     /**
@@ -351,7 +480,11 @@ class Substack_Sync_Processor
     {
         $post_data = $this->prepare_post_data($item);
         $post_data['ID'] = $existing_post['post_id'];
-        $post_data['post_status'] = 'draft'; // Set to draft for review
+        // Preserve the existing post status — never revert a published post to draft
+        $current_post = get_post($existing_post['post_id']);
+        if ($current_post) {
+            $post_data['post_status'] = $current_post->post_status;
+        }
         $post_title = $post_data['post_title'];
         $guid = $item->get_id();
 
@@ -452,28 +585,91 @@ class Substack_Sync_Processor
     /**
      * Process and import images from post content.
      *
+     * Downloads images to the WP media library, rewrites URLs in post content
+     * to point to the local copies, and sets the first image as featured.
+     * Detects duplicates by checking attachment meta for the original URL.
+     *
      * @param int $post_id The WordPress post ID.
      * @param string $content The post content.
      */
     private function process_post_images(int $post_id, string $content): void
     {
         $doc = new DOMDocument();
-        @$doc->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        @$doc->loadHTML(
+            mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8'),
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
 
         $images = $doc->getElementsByTagName('img');
-        $first_image_set = false;
+        $first_image_set = has_post_thumbnail($post_id);
+        $url_replacements = [];
 
         foreach ($images as $img) {
             $src = $img->getAttribute('src');
-            if (! empty($src) && filter_var($src, FILTER_VALIDATE_URL)) {
+            if (empty($src) || ! filter_var($src, FILTER_VALIDATE_URL)) {
+                continue;
+            }
+
+            // Check for existing attachment with this original URL (duplicate detection)
+            $attachment_id = $this->find_existing_attachment($src);
+
+            if (! $attachment_id) {
+                // Download the image to the media library
                 $attachment_id = media_sideload_image($src, $post_id, '', 'id');
 
-                if (! is_wp_error($attachment_id) && ! $first_image_set) {
-                    set_post_thumbnail($post_id, $attachment_id);
-                    $first_image_set = true;
+                if (is_wp_error($attachment_id)) {
+                    error_log('Substack Sync: Failed to sideload image ' . $src . ' - ' . $attachment_id->get_error_message());
+                    continue;
                 }
+
+                // Store the original URL in attachment meta for future duplicate detection
+                update_post_meta($attachment_id, '_substack_original_url', $src);
+            }
+
+            // Get the local URL and queue the replacement
+            $local_url = wp_get_attachment_url($attachment_id);
+            if ($local_url) {
+                $url_replacements[$src] = $local_url;
+            }
+
+            // Set the first successfully imported image as featured
+            if (! $first_image_set) {
+                set_post_thumbnail($post_id, $attachment_id);
+                $first_image_set = true;
             }
         }
+
+        // Rewrite image URLs in post content to point to local copies
+        if (! empty($url_replacements)) {
+            $updated_content = get_post_field('post_content', $post_id);
+            foreach ($url_replacements as $original_url => $local_url) {
+                $updated_content = str_replace($original_url, $local_url, $updated_content);
+            }
+            wp_update_post([
+                'ID' => $post_id,
+                'post_content' => $updated_content,
+            ]);
+        }
+    }
+
+    /**
+     * Find an existing media attachment by its original Substack URL.
+     *
+     * @param string $original_url The original external image URL.
+     * @return int|false Attachment ID if found, false otherwise.
+     */
+    private function find_existing_attachment(string $original_url)
+    {
+        global $wpdb;
+
+        $attachment_id = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_substack_original_url' AND meta_value = %s LIMIT 1",
+                $original_url
+            )
+        );
+
+        return $attachment_id ? (int) $attachment_id : false;
     }
 
     /**

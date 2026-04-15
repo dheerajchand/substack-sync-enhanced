@@ -3,18 +3,20 @@
 declare(strict_types=1);
 
 /**
- * Plugin Name:       Substack Sync
- * Plugin URI:        https://www.christopherspenn.com/2025/08/substack-sync-for-wordpress/
- * Description:       Syncs a Substack RSS feed to your WordPress site. NO SUPPORT PROVIDED. Use at your own risk. If it lights your computer on fire, it's not the author's fault.
- * Version:           1.0.2
- * Author:            Christopher S. Penn
- * Author URI:        https://www.christopherspenn.com/
+ * Plugin Name:       Substack Sync Enhanced
+ * Plugin URI:        https://github.com/dheerajchand/substack-sync-enhanced
+ * Description:       Syncs a Substack RSS feed to your WordPress site with reliable image handling, content preservation, and automated scheduling. Enhanced fork of Substack Sync by Christopher S. Penn.
+ * Version:           1.1.0
+ * Author:            Dheeraj Chand (forked from Christopher S. Penn)
+ * Author URI:        https://dheerajchand.com/
+ * Original Author:   Christopher S. Penn (https://www.christopherspenn.com/)
  * License:           Apache-2.0
  * License URI:       https://www.apache.org/licenses/LICENSE-2.0
- * Text Domain:       substack-sync
+ * Text Domain:       substack-sync-enhanced
+ * Domain Path:       /languages
  * Network:           false
  * Requires at least: 6.0
- * Tested up to:      6.6
+ * Tested up to:      6.8
  * Requires PHP:      8.0
  */
 
@@ -24,13 +26,23 @@ if (! defined('WPINC')) {
 }
 
 // Define Plugin Constants
-define('SUBSTACK_SYNC_VERSION', '1.0.2');
+define('SUBSTACK_SYNC_VERSION', '1.1.0');
 define('SUBSTACK_SYNC_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('SUBSTACK_SYNC_PLUGIN_URL', plugin_dir_url(__FILE__));
+
+/**
+ * Load plugin text domain for translations.
+ */
+function substack_sync_enhanced_load_textdomain(): void
+{
+    load_plugin_textdomain('substack-sync-enhanced', false, dirname(plugin_basename(__FILE__)) . '/languages');
+}
+add_action('plugins_loaded', 'substack_sync_enhanced_load_textdomain');
 
 /**
  * The code that runs during plugin activation.
  */
-function activate_substack_sync(): void
+function substack_sync_enhanced_activate(): void
 {
     require_once SUBSTACK_SYNC_PLUGIN_DIR . 'includes/class-substack-sync-activator.php';
     Substack_Sync_Activator::activate();
@@ -39,14 +51,14 @@ function activate_substack_sync(): void
 /**
  * The code that runs during plugin deactivation.
  */
-function deactivate_substack_sync(): void
+function substack_sync_enhanced_deactivate(): void
 {
     require_once SUBSTACK_SYNC_PLUGIN_DIR . 'includes/class-substack-sync-deactivator.php';
     Substack_Sync_Deactivator::deactivate();
 }
 
-register_activation_hook(__FILE__, 'activate_substack_sync');
-register_deactivation_hook(__FILE__, 'deactivate_substack_sync');
+register_activation_hook(__FILE__, 'substack_sync_enhanced_activate');
+register_deactivation_hook(__FILE__, 'substack_sync_enhanced_deactivate');
 
 // Include All Other Files
 require_once SUBSTACK_SYNC_PLUGIN_DIR . 'admin/class-substack-sync-admin.php';

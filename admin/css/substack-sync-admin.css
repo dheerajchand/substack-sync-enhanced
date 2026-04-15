@@ -1,0 +1,261 @@
+/**
+ * Substack Sync Enhanced - Admin Styles
+ *
+ * Originally forked from Substack Sync by Christopher S. Penn.
+ * Licensed under Apache-2.0.
+ */
+
+/* Tab navigation */
+.substack-sync-wrap .nav-tab-wrapper {
+    border-bottom: 1px solid #ccd0d4;
+    margin-bottom: 20px;
+}
+
+.substack-sync-wrap .nav-tab {
+    cursor: pointer;
+}
+
+.substack-sync-wrap .tab-content {
+    padding: 20px 0;
+}
+
+/* Stat cards grid */
+.sync-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 6px;
+    border-left: 4px solid #0073aa;
+}
+
+.stat-card h3 {
+    margin-top: 0;
+}
+
+.stat-card .stat-value {
+    font-size: 24px;
+    font-weight: bold;
+    margin: 5px 0;
+}
+
+.stat-card--imported {
+    border-left-color: #46b450;
+}
+
+.stat-card--imported .stat-value {
+    color: #46b450;
+}
+
+.stat-card--updated {
+    border-left-color: #ffb900;
+}
+
+.stat-card--updated .stat-value {
+    color: #ffb900;
+}
+
+.stat-card--errors {
+    border-left-color: #dc3232;
+}
+
+.stat-card--errors .stat-value {
+    color: #dc3232;
+}
+
+/* Category mapping rows */
+.category-mapping-row {
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.category-mapping-row input[type="text"] {
+    width: 200px;
+    margin-right: 10px;
+}
+
+.category-mapping-row select {
+    width: 200px;
+    margin-right: 10px;
+}
+
+/* Sync progress */
+.sync-progress {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    background: #f9f9f9;
+    margin-top: 10px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background: #e0e0e0;
+    border-radius: 10px;
+    margin: 10px 0;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0073aa, #005a87);
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+/* Post log */
+.post-log {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 10px;
+    background: white;
+    margin-top: 10px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.post-entry {
+    padding: 3px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.post-entry:last-child {
+    border-bottom: none;
+}
+
+.post-entry.success {
+    color: #46b450;
+}
+
+.post-entry.error {
+    color: #dc3232;
+}
+
+.post-entry.warning {
+    color: #ffb900;
+}
+
+/* Disclaimer and info boxes */
+.substack-sync-disclaimer {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.substack-sync-disclaimer h3 {
+    color: #856404;
+    margin-top: 0;
+}
+
+.substack-sync-disclaimer p {
+    color: #856404;
+}
+
+.substack-sync-info {
+    background: #d1ecf1;
+    border: 1px solid #bee5eb;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.substack-sync-info h3 {
+    color: #0c5460;
+    margin-top: 0;
+}
+
+.substack-sync-info p,
+.substack-sync-info ul,
+.substack-sync-info li,
+.substack-sync-info a {
+    color: #0c5460;
+}
+
+.substack-sync-info a {
+    text-decoration: underline;
+}
+
+/* Warning box for destructive actions */
+.substack-sync-warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.substack-sync-warning h3 {
+    color: #856404;
+    margin-top: 0;
+}
+
+.substack-sync-warning p {
+    color: #856404;
+}
+
+/* Failed posts list */
+.failed-posts-list {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.failed-post-item {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+/* Activity log */
+.sync-activity-log {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    height: 300px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 10px;
+}
+
+/* Status messages */
+.substack-sync-status {
+    padding: 10px;
+    border-left: 4px solid #0073aa;
+    background: #f9f9f9;
+    margin: 10px 0;
+}
+
+.substack-sync-status--success {
+    border-left-color: #46b450;
+}
+
+.substack-sync-status--error {
+    border-left-color: #dc3232;
+}
+
+.substack-sync-status--warning {
+    border-left-color: #ffb900;
+}
+
+/* Manage actions spacing */
+.manage-actions .button {
+    margin-right: 5px;
+}
+
+.manage-actions > div {
+    margin: 20px 0;
+}
