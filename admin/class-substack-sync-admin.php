@@ -31,6 +31,8 @@ class Substack_Sync_Admin
         add_action('wp_ajax_substack_retry_failed', [$this, 'handle_retry_failed']);
         add_action('wp_ajax_substack_rollback_posts', [$this, 'handle_rollback_posts']);
         add_action('wp_ajax_substack_get_sync_stats', [$this, 'handle_get_sync_stats']);
+        add_action('wp_ajax_substack_sitemap_sync', [$this, 'handle_sitemap_sync']);
+        add_action('wp_ajax_substack_zip_import', [$this, 'handle_zip_import']);
     }
 
     /**
@@ -372,6 +374,26 @@ class Substack_Sync_Admin
                 </div>
 
                 <div id="sync-status"></div>
+
+                <hr style="margin: 30px 0;">
+
+                <h2><?php echo esc_html__('Full Archive Sync (Sitemap)', 'substack-sync-enhanced'); ?></h2>
+                <p><?php echo esc_html__('The RSS feed only includes recent posts. Use sitemap sync to import ALL posts from your Substack archive.', 'substack-sync-enhanced'); ?></p>
+                <div style="margin: 10px 0;">
+                    <button type="button" id="sitemap-sync-btn" class="button button-secondary"><?php echo esc_html__('Sync All Posts (Sitemap)', 'substack-sync-enhanced'); ?></button>
+                    <p class="description"><?php echo esc_html__('Scrapes each post from your Substack site. Slower than RSS but gets all posts. Already-synced posts are skipped.', 'substack-sync-enhanced'); ?></p>
+                </div>
+                <div id="sitemap-sync-status"></div>
+
+                <hr style="margin: 30px 0;">
+
+                <h2><?php echo esc_html__('Import from Substack Export (ZIP)', 'substack-sync-enhanced'); ?></h2>
+                <p><?php echo esc_html__('Upload a ZIP file exported from Substack (Settings > Export in your Substack dashboard). This imports all posts including their full content.', 'substack-sync-enhanced'); ?></p>
+                <div style="margin: 10px 0;">
+                    <input type="file" id="substack-zip-file" accept=".zip">
+                    <button type="button" id="zip-import-btn" class="button button-secondary"><?php echo esc_html__('Import ZIP', 'substack-sync-enhanced'); ?></button>
+                </div>
+                <div id="zip-import-status"></div>
             </div>
 
             <div id="manage" class="tab-content" style="display: none;">
@@ -647,6 +669,93 @@ class Substack_Sync_Admin
         } catch (Throwable $e) {
             error_log('Substack Sync Stats Error: ' . $e->getMessage());
             wp_send_json_error(['message' => 'Stats error: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Handle AJAX sitemap sync request (batch processing).
+     */
+    public function handle_sitemap_sync(): void
+    {
+        ob_clean();
+
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Insufficient permissions']);
+            return;
+        }
+
+        if (! wp_verify_nonce($_POST['_ajax_nonce'] ?? '', 'substack_sync_nonce')) {
+            wp_send_json_error(['message' => 'Invalid nonce']);
+            return;
+        }
+
+        $offset = intval($_POST['offset'] ?? 0);
+        $batch_size = intval($_POST['batch_size'] ?? 1);
+
+        try {
+            require_once SUBSTACK_SYNC_PLUGIN_DIR . 'includes/class-substack-sync-processor.php';
+            $processor = new Substack_Sync_Processor();
+            $result = $processor->run_sitemap_sync($batch_size, $offset);
+
+            wp_send_json_success($result);
+        } catch (Throwable $e) {
+            error_log('Substack Sync Sitemap Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            wp_send_json_error([
+                'message' => 'Sitemap sync error: ' . $e->getMessage(),
+                'has_more' => false,
+            ]);
+        }
+    }
+
+    /**
+     * Handle AJAX ZIP import request.
+     */
+    public function handle_zip_import(): void
+    {
+        ob_clean();
+
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Insufficient permissions']);
+            return;
+        }
+
+        if (! wp_verify_nonce($_POST['_ajax_nonce'] ?? '', 'substack_sync_nonce')) {
+            wp_send_json_error(['message' => 'Invalid nonce']);
+            return;
+        }
+
+        if (empty($_FILES['zip_file'])) {
+            wp_send_json_error(['message' => 'No file uploaded']);
+            return;
+        }
+
+        $file = $_FILES['zip_file'];
+
+        // Validate the file
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            wp_send_json_error(['message' => 'Upload error: ' . $file['error']]);
+            return;
+        }
+
+        $file_type = wp_check_filetype($file['name']);
+        if ($file_type['ext'] !== 'zip') {
+            wp_send_json_error(['message' => 'Please upload a ZIP file']);
+            return;
+        }
+
+        try {
+            require_once SUBSTACK_SYNC_PLUGIN_DIR . 'includes/class-substack-sync-processor.php';
+            $processor = new Substack_Sync_Processor();
+            $result = $processor->import_from_zip($file['tmp_name']);
+
+            if ($result['success']) {
+                wp_send_json_success($result);
+            } else {
+                wp_send_json_error($result);
+            }
+        } catch (Throwable $e) {
+            error_log('Substack Sync ZIP Import Error: ' . $e->getMessage());
+            wp_send_json_error(['message' => 'Import error: ' . $e->getMessage()]);
         }
     }
 }

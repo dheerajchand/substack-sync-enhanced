@@ -104,6 +104,16 @@
         if (refreshLogsBtn) {
             refreshLogsBtn.addEventListener('click', function () { self.refreshLogs(); });
         }
+
+        var sitemapSyncBtn = document.getElementById('sitemap-sync-btn');
+        if (sitemapSyncBtn) {
+            sitemapSyncBtn.addEventListener('click', function () { self.startSitemapSync(); });
+        }
+
+        var zipImportBtn = document.getElementById('zip-import-btn');
+        if (zipImportBtn) {
+            zipImportBtn.addEventListener('click', function () { self.importZip(); });
+        }
     };
 
     SubstackAdminManager.prototype.retryFailedPosts = function () {
@@ -168,6 +178,97 @@
         .catch(function (error) {
             this.showStatus('rollback-status', 'Error: ' + error.message, 'error');
         }.bind(this));
+    };
+
+    SubstackAdminManager.prototype.startSitemapSync = function () {
+        if (!confirm('This will sync ALL posts from your Substack archive via the sitemap. Already-synced posts will be skipped. Continue?')) return;
+
+        this.sitemapOffset = 0;
+        this.sitemapTotal = 0;
+        this.sitemapProcessed = 0;
+        this.showStatus('sitemap-sync-status', 'Fetching sitemap and starting sync...', 'info');
+        document.getElementById('sitemap-sync-btn').disabled = true;
+        this.processSitemapBatch();
+    };
+
+    SubstackAdminManager.prototype.processSitemapBatch = function () {
+        var self = this;
+
+        fetch(this.ajaxUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'action=substack_sitemap_sync&_ajax_nonce=' + this.nonce + '&offset=' + this.sitemapOffset + '&batch_size=1'
+        })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+            if (data.success) {
+                var result = data.data;
+                if (self.sitemapTotal === 0) {
+                    self.sitemapTotal = result.total_posts;
+                }
+                self.sitemapProcessed += result.posts_processed;
+
+                var msg = 'Progress: ' + self.sitemapProcessed + '/' + self.sitemapTotal + ' posts';
+                if (result.processed_posts && result.processed_posts.length > 0) {
+                    var post = result.processed_posts[0];
+                    msg += ' — ' + post.action + ': ' + post.post_title;
+                }
+                self.showStatus('sitemap-sync-status', msg, 'info');
+
+                if (result.has_more) {
+                    self.sitemapOffset = result.next_offset;
+                    setTimeout(function () { self.processSitemapBatch(); }, 500);
+                } else {
+                    self.showStatus('sitemap-sync-status', 'Sitemap sync complete! Processed ' + self.sitemapProcessed + ' posts.', 'success');
+                    document.getElementById('sitemap-sync-btn').disabled = false;
+                    setTimeout(function () { location.reload(); }, 3000);
+                }
+            } else {
+                self.showStatus('sitemap-sync-status', 'Error: ' + (data.data.message || data.data), 'error');
+                document.getElementById('sitemap-sync-btn').disabled = false;
+            }
+        })
+        .catch(function (error) {
+            self.showStatus('sitemap-sync-status', 'Network error: ' + error.message, 'error');
+            document.getElementById('sitemap-sync-btn').disabled = false;
+        });
+    };
+
+    SubstackAdminManager.prototype.importZip = function () {
+        var fileInput = document.getElementById('substack-zip-file');
+        if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+            alert('Please select a ZIP file first.');
+            return;
+        }
+
+        this.showStatus('zip-import-status', 'Uploading and importing...', 'info');
+        document.getElementById('zip-import-btn').disabled = true;
+
+        var formData = new FormData();
+        formData.append('action', 'substack_zip_import');
+        formData.append('_ajax_nonce', this.nonce);
+        formData.append('zip_file', fileInput.files[0]);
+
+        var self = this;
+
+        fetch(this.ajaxUrl, {
+            method: 'POST',
+            body: formData
+        })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+            if (data.success) {
+                self.showStatus('zip-import-status', data.data.message, 'success');
+                setTimeout(function () { location.reload(); }, 3000);
+            } else {
+                self.showStatus('zip-import-status', 'Error: ' + (data.data.message || data.data), 'error');
+            }
+            document.getElementById('zip-import-btn').disabled = false;
+        })
+        .catch(function (error) {
+            self.showStatus('zip-import-status', 'Network error: ' + error.message, 'error');
+            document.getElementById('zip-import-btn').disabled = false;
+        });
     };
 
     SubstackAdminManager.prototype.refreshLogs = function () {
