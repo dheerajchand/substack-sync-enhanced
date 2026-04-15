@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Plugin Name:       Substack Sync Enhanced
  * Plugin URI:        https://github.com/dheerajchand/substack-sync-enhanced
  * Description:       Syncs a Substack RSS feed to your WordPress site with reliable image handling, content preservation, and automated scheduling. Enhanced fork of Substack Sync by Christopher S. Penn.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Author:            Dheeraj Chand (forked from Christopher S. Penn)
  * Author URI:        https://dheerajchand.com/
  * Original Author:   Christopher S. Penn (https://www.christopherspenn.com/)
@@ -26,7 +26,7 @@ if (! defined('WPINC')) {
 }
 
 // Define Plugin Constants
-define('SUBSTACK_SYNC_VERSION', '1.2.0');
+define('SUBSTACK_SYNC_VERSION', '1.3.0');
 define('SUBSTACK_SYNC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SUBSTACK_SYNC_PLUGIN_URL', plugin_dir_url(__FILE__));
 

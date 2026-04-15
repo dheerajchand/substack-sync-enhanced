@@ -978,12 +978,19 @@ class Substack_Sync_Processor
     /**
      * Scrape a single Substack post page and extract content.
      *
+     * Substack uses client-side rendering — post content is embedded as JSON
+     * in a window._preloads script tag, not in static HTML. This method
+     * extracts the post data from that JSON structure.
+     *
      * @param string $url The post URL to scrape.
      * @return array<string, mixed>|null Extracted post data or null on failure.
      */
     private function scrape_substack_post(string $url): ?array
     {
-        $response = wp_remote_get($url, ['timeout' => 30]);
+        $response = wp_remote_get($url, [
+            'timeout' => 30,
+            'user-agent' => 'Mozilla/5.0 (compatible; SubstackSync/1.2; +https://wordpress.org/)',
+        ]);
 
         if (is_wp_error($response)) {
             error_log('Substack Sync: Failed to fetch post ' . $url . ' - ' . $response->get_error_message());
@@ -992,14 +999,160 @@ class Substack_Sync_Processor
 
         $html = wp_remote_retrieve_body($response);
         if (empty($html)) {
+            error_log('Substack Sync: Empty response body from ' . $url);
             return null;
         }
 
+        // Strategy 1: Extract from window._preloads JSON (Substack's client-side rendering)
+        $post_data = $this->extract_from_preloads($html, $url);
+        if ($post_data) {
+            return $post_data;
+        }
+
+        // Strategy 2: Extract from JSON-LD structured data
+        $post_data = $this->extract_from_json_ld($html, $url);
+        if ($post_data) {
+            return $post_data;
+        }
+
+        // Strategy 3: Fallback to HTML DOM parsing (older Substack versions)
+        $post_data = $this->extract_from_html_dom($html, $url);
+        if ($post_data) {
+            return $post_data;
+        }
+
+        error_log('Substack Sync: All extraction strategies failed for ' . $url);
+        return null;
+    }
+
+    /**
+     * Extract post data from Substack's window._preloads JSON.
+     *
+     * @param string $html The full page HTML.
+     * @param string $url The post URL (used as GUID).
+     * @return array<string, mixed>|null Extracted post data or null.
+     */
+    private function extract_from_preloads(string $html, string $url): ?array
+    {
+        // Match the _preloads JSON — it's embedded as a JSON.parse() call
+        if (! preg_match('/window\._preloads\s*=\s*JSON\.parse\("(.+?)"\)\s*;?\s*<\/script>/s', $html, $matches)) {
+            return null;
+        }
+
+        // The JSON string is escaped (double-escaped quotes, etc.)
+        $json_str = $matches[1];
+        // Unescape the string: \" → ", \\ → \, etc.
+        $json_str = stripcslashes($json_str);
+
+        $preloads = json_decode($json_str, true);
+        if (json_last_error() !== JSON_ERROR_NONE || empty($preloads)) {
+            error_log('Substack Sync: Failed to parse _preloads JSON from ' . $url . ': ' . json_last_error_msg());
+            return null;
+        }
+
+        // Navigate to the post data
+        $post = $preloads['post'] ?? null;
+        if (! $post) {
+            return null;
+        }
+
+        $title = $post['title'] ?? '';
+        $content = $post['body_html'] ?? '';
+        $date = $post['post_date'] ?? $post['published_at'] ?? '';
+
+        if (empty($title) || empty($content)) {
+            return null;
+        }
+
+        // Convert date to MySQL format
+        if (! empty($date)) {
+            $timestamp = strtotime($date);
+            $date = $timestamp ? gmdate('Y-m-d H:i:s', $timestamp) : current_time('mysql');
+        } else {
+            $date = current_time('mysql');
+        }
+
+        return [
+            'id' => $url,
+            'title' => trim($title),
+            'content' => $content,
+            'date' => $date,
+            'source_url' => $url,
+        ];
+    }
+
+    /**
+     * Extract post data from JSON-LD structured data.
+     *
+     * @param string $html The full page HTML.
+     * @param string $url The post URL (used as GUID).
+     * @return array<string, mixed>|null Extracted post data or null.
+     */
+    private function extract_from_json_ld(string $html, string $url): ?array
+    {
+        if (! preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/si', $html, $matches)) {
+            return null;
+        }
+
+        foreach ($matches[1] as $json_str) {
+            $data = json_decode(trim($json_str), true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                continue;
+            }
+
+            // Look for Article or BlogPosting type
+            $type = $data['@type'] ?? '';
+            if (! in_array($type, ['Article', 'BlogPosting', 'NewsArticle'], true)) {
+                continue;
+            }
+
+            $title = $data['headline'] ?? $data['name'] ?? '';
+            $content = $data['articleBody'] ?? '';
+            $date = $data['datePublished'] ?? '';
+
+            if (empty($title)) {
+                continue;
+            }
+
+            // articleBody is usually plain text, but we'll use it if we have nothing else
+            if (! empty($content)) {
+                // Wrap plain text in paragraphs
+                $content = '<p>' . nl2br(esc_html($content)) . '</p>';
+            }
+
+            if (! empty($date)) {
+                $timestamp = strtotime($date);
+                $date = $timestamp ? gmdate('Y-m-d H:i:s', $timestamp) : current_time('mysql');
+            }
+
+            if (! empty($title) && ! empty($content)) {
+                return [
+                    'id' => $url,
+                    'title' => trim($title),
+                    'content' => $content,
+                    'date' => $date ?: current_time('mysql'),
+                    'source_url' => $url,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract post data from HTML DOM (fallback for older Substack rendering).
+     *
+     * @param string $html The full page HTML.
+     * @param string $url The post URL (used as GUID).
+     * @return array<string, mixed>|null Extracted post data or null.
+     */
+    private function extract_from_html_dom(string $html, string $url): ?array
+    {
         $doc = new DOMDocument();
         @$doc->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
         $xpath = new DOMXPath($doc);
 
-        // Extract title from meta tag or h1
+        // Try meta tags for title
         $title = '';
         $title_meta = $xpath->query('//meta[@property="og:title"]');
         if ($title_meta->length > 0) {
@@ -1012,40 +1165,40 @@ class Substack_Sync_Processor
             }
         }
 
-        // Extract publish date
+        // Try meta tags for date
         $date = '';
         $date_meta = $xpath->query('//meta[@property="article:published_time"]');
         if ($date_meta->length > 0) {
             $date = $date_meta->item(0)->getAttribute('content');
         }
-        // Convert ISO 8601 to MySQL datetime
         if (! empty($date)) {
             $timestamp = strtotime($date);
             $date = $timestamp ? gmdate('Y-m-d H:i:s', $timestamp) : '';
         }
 
-        // Extract content from the post body
+        // Try various content selectors
         $content = '';
-        $body_nodes = $xpath->query('//div[contains(@class, "body")]//div[contains(@class, "available-content")]');
-        if ($body_nodes->length > 0) {
-            $content = $doc->saveHTML($body_nodes->item(0));
-        }
+        $selectors = [
+            '//div[contains(@class, "available-content")]',
+            '//div[contains(@class, "post-content")]',
+            '//div[contains(@class, "body")]//div[contains(@class, "markup")]',
+            '//article//div[contains(@class, "body")]',
+        ];
 
-        // Fallback: try the subtitle-based approach
-        if (empty($content)) {
-            $body_nodes = $xpath->query('//div[contains(@class, "post-content")]');
-            if ($body_nodes->length > 0) {
-                $content = $doc->saveHTML($body_nodes->item(0));
+        foreach ($selectors as $selector) {
+            $nodes = $xpath->query($selector);
+            if ($nodes->length > 0) {
+                $content = $doc->saveHTML($nodes->item(0));
+                break;
             }
         }
 
         if (empty($title) || empty($content)) {
-            error_log('Substack Sync: Could not extract title or content from ' . $url);
             return null;
         }
 
         return [
-            'id' => $url, // Use URL as GUID for sitemap-sourced posts
+            'id' => $url,
             'title' => trim($title),
             'content' => $content,
             'date' => $date ?: current_time('mysql'),
