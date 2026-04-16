@@ -14,9 +14,8 @@ declare(strict_types=1);
  * License URI:       https://www.apache.org/licenses/LICENSE-2.0
  * Text Domain:       substack-sync-enhanced
  * Domain Path:       /languages
- * Network:           false
  * Requires at least: 6.0
- * Tested up to:      6.8
+ * Tested up to:      6.9
  * Requires PHP:      8.0
  */
 
