@@ -1,10 +1,10 @@
-=== Substack Sync Enhanced ===
-Contributors: dheerajchand
+=== Siege Analytics Sync for Substack ===
+Contributors: dchand
 Tags: substack, rss, sync, import, newsletter
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@ Automatically sync your Substack newsletter to WordPress with reliable image han
 
 == Description ==
 
-Substack Sync Enhanced automatically imports your Substack newsletter posts into your self-hosted WordPress site, giving you true ownership and a permanent archive of your content.
+Siege Analytics Sync for Substack automatically imports your Substack newsletter posts into your self-hosted WordPress site, giving you true ownership and a permanent archive of your content.
 
 This is an enhanced fork of [Substack Sync](https://github.com/cspenn/substack-wp-sync) by Christopher S. Penn, with critical bug fixes, security improvements, and WordPress.org compliance.
 
@@ -53,7 +53,7 @@ If this plugin helps you, Christopher asks that you consider supporting:
 
 == Installation ==
 
-1. Upload the `substack-sync-enhanced` folder to `/wp-content/plugins/`
+1. Upload the `siege-analytics-sync-for-substack` folder to `/wp-content/plugins/`
 2. Activate the plugin through the 'Plugins' menu in WordPress
 3. Go to Settings > Substack Sync to configure your RSS feed URL
 4. Enter your Substack feed URL (e.g., `https://yourname.substack.com/feed`)
@@ -94,6 +94,18 @@ They use the same database table and settings, so you should deactivate the orig
 
 == Changelog ==
 
+= 1.4.0 =
+* Renamed plugin to "Siege Analytics Sync for Substack" for WordPress.org trademark compliance
+* Fixed: All nonce verification now properly sanitized with sanitize_text_field and wp_unslash
+* Removed: load_plugin_textdomain call (not needed for WordPress.org hosted plugins since WP 4.6)
+* Fixed: Contributors field now uses correct WordPress.org username
+
+= 1.3.0 =
+* Added: Full archive sync via Substack sitemap scraping
+* Added: Import from Substack export ZIP file
+* Fixed: Substack client-side rendering extraction (window._preloads JSON parsing)
+* Added: Multi-strategy content extraction (preloads, JSON-LD, HTML DOM)
+
 = 1.1.0 =
 * **Fork from Substack Sync 1.0.2 by Christopher S. Penn**
 * Fixed: Published posts no longer revert to draft on sync updates
@@ -109,6 +121,9 @@ They use the same database table and settings, so you should deactivate the orig
 * Added: WordPress.org standard readme.txt
 
 == Upgrade Notice ==
+
+= 1.4.0 =
+Plugin renamed for WordPress.org trademark compliance. Nonce security improvements.
 
 = 1.1.0 =
 Critical bug fixes: posts no longer revert to draft on sync, images are properly hosted locally, and batch sync performance is significantly improved.

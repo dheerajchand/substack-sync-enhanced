@@ -1,6 +1,6 @@
-# Substack Sync Enhanced
+# Siege Analytics Sync for Substack
 
-An enhanced WordPress plugin that automatically syncs your Substack newsletter content to your WordPress site, with reliable image handling, content preservation, and duplicate detection.
+A WordPress plugin that automatically syncs your Substack newsletter content to your WordPress site, with reliable image handling, content preservation, and duplicate detection.
 
 ## Attribution
 
@@ -34,6 +34,8 @@ This fork fixes several critical bugs and brings the plugin up to WordPress.org 
 - **Full Content Preservation:** HTML formatting, links, and embedded content pass through intact
 - **Reliable Image Handling:** Images downloaded to WP media library with URL rewriting
 - **Duplicate Detection:** GUID-based post tracking and image URL tracking prevent duplicates
+- **Full Archive Sync:** Sitemap-based scraping imports all posts, not just recent RSS items
+- **ZIP Import:** Import from Substack's data export (Settings > Export in Substack)
 - **Category Mapping:** Keyword-based automatic category assignment
 - **Batch Processing:** Progressive sync with real-time progress tracking via AJAX
 - **Error Recovery:** Automatic retry (up to 3 attempts) with detailed logging
@@ -41,7 +43,7 @@ This fork fixes several critical bugs and brings the plugin up to WordPress.org 
 
 ## Installation
 
-1. Upload the `substack-sync-enhanced` folder to `/wp-content/plugins/`
+1. Upload the `siege-analytics-sync-for-substack` folder to `/wp-content/plugins/`
 2. Activate the plugin through the 'Plugins' menu in WordPress
 3. Go to **Settings > Substack Sync** to configure your RSS feed URL
 

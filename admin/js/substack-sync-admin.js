@@ -1,5 +1,5 @@
 /**
- * Substack Sync Enhanced - Admin JavaScript
+ * Siege Analytics Sync for Substack - Admin JavaScript
  *
  * Originally forked from Substack Sync by Christopher S. Penn.
  * Licensed under Apache-2.0.
